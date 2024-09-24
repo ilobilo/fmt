@@ -936,8 +936,12 @@ enum class type {
   // followed by floating-point types.
   float_type,
   double_type,
+#if FMT_USE_LONG_DOUBLE
   long_double_type,
   last_numeric_type = long_double_type,
+#else
+  last_numeric_type = double_type,
+#endif
   cstring_type,
   string_type,
   pointer_type,
@@ -963,7 +967,9 @@ FMT_TYPE_CONSTANT(bool, bool_type);
 FMT_TYPE_CONSTANT(Char, char_type);
 FMT_TYPE_CONSTANT(float, float_type);
 FMT_TYPE_CONSTANT(double, double_type);
+#if FMT_USE_LONG_DOUBLE
 FMT_TYPE_CONSTANT(long double, long_double_type);
+#endif
 FMT_TYPE_CONSTANT(const Char*, cstring_type);
 FMT_TYPE_CONSTANT(basic_string_view<Char>, string_type);
 FMT_TYPE_CONSTANT(const void*, pointer_type);
@@ -988,8 +994,12 @@ enum {
              set(type::uint128_type),
   bool_set = set(type::bool_type),
   char_set = set(type::char_type),
+#if FMT_USE_LONG_DOUBLE
   float_set = set(type::float_type) | set(type::double_type) |
               set(type::long_double_type),
+#else
+  float_set = set(type::float_type) | set(type::double_type),
+#endif
   string_set = set(type::string_type),
   cstring_set = set(type::cstring_type),
   pointer_set = set(type::pointer_type)
@@ -1127,7 +1137,9 @@ template <typename Char> struct type_mapper {
 
   static auto map(float) -> float;
   static auto map(double) -> double;
+#if FMT_USE_LONG_DOUBLE
   static auto map(long double) -> long double;
+#endif
 
   static auto map(Char*) -> const Char*;
   static auto map(const Char*) -> const Char*;
@@ -2059,7 +2071,9 @@ template <typename Context> class value {
     char_type char_value;
     float float_value;
     double double_value;
+#if FMT_USE_LONG_DOUBLE
     long double long_double_value;
+#endif
     const void* pointer;
     string_value<char_type> string;
     custom_value<Context> custom;
@@ -2101,7 +2115,9 @@ template <typename Context> class value {
 
   constexpr FMT_INLINE value(float x FMT_BUILTIN) : float_value(x) {}
   constexpr FMT_INLINE value(double x FMT_BUILTIN) : double_value(x) {}
+#if FMT_USE_LONG_DOUBLE
   FMT_INLINE value(long double x FMT_BUILTIN) : long_double_value(x) {}
+#endif
 
   FMT_CONSTEXPR FMT_INLINE value(char_type* x FMT_BUILTIN) {
     string.data = x;
@@ -2449,7 +2465,9 @@ template <typename Context> class basic_format_arg {
     case detail::type::char_type:        return vis(value_.char_value);
     case detail::type::float_type:       return vis(value_.float_value);
     case detail::type::double_type:      return vis(value_.double_value);
+#if FMT_USE_LONG_DOUBLE
     case detail::type::long_double_type: return vis(value_.long_double_value);
+#endif
     case detail::type::cstring_type:     return vis(value_.string.data);
     case detail::type::string_type:      return vis(value_.string.str());
     case detail::type::pointer_type:     return vis(value_.pointer);
