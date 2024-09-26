@@ -462,6 +462,7 @@ template <> constexpr auto num_bits<int128_opt>() -> int { return 128; }
 template <> constexpr auto num_bits<uint128_opt>() -> int { return 128; }
 template <> constexpr auto num_bits<uint128_fallback>() -> int { return 128; }
 
+#if FMT_SUPPORT_FLOAT
 // A heterogeneous bit_cast used for converting 96-bit long double to uint128_t
 // and 128-bit pointers to uint128_fallback.
 template <typename To, typename From, FMT_ENABLE_IF(sizeof(To) > sizeof(From))>
@@ -480,6 +481,7 @@ inline auto bit_cast(const From& from) -> To {
   }
   return result;
 }
+#endif
 
 template <typename UInt>
 FMT_CONSTEXPR20 inline auto countl_zero_fallback(UInt n) -> int {
@@ -1524,6 +1526,7 @@ inline auto umul128(uint64_t x, uint64_t y) noexcept -> uint128_fallback {
 #endif
 }
 
+#if FMT_SUPPORT_FLOAT
 namespace dragonbox {
 // Computes floor(log10(pow(2, e))) for e in [-2620, 2620] using the method from
 // https://fmt.dev/papers/Dragonbox.pdf#page=28, section 6.1.
@@ -1733,6 +1736,7 @@ FMT_CONSTEXPR auto normalize(basic_fp<F> value) -> basic_fp<F> {
   value.e -= offset;
   return value;
 }
+#endif
 
 // Computes lhs * rhs / pow(2, 64) rounded to nearest with half-up tie breaking.
 FMT_CONSTEXPR inline auto multiply(uint64_t lhs, uint64_t rhs) -> uint64_t {
@@ -1752,6 +1756,7 @@ FMT_CONSTEXPR inline auto multiply(uint64_t lhs, uint64_t rhs) -> uint64_t {
 #endif
 }
 
+#if FMT_SUPPORT_FLOAT
 FMT_CONSTEXPR inline auto operator*(fp x, fp y) -> fp {
   return {multiply(x.f, y.f), x.e + y.e + 64};
 }
@@ -1764,6 +1769,7 @@ template <typename T>
 constexpr auto convert_float(T value) -> convert_float_result<T> {
   return static_cast<convert_float_result<T>>(value);
 }
+#endif
 
 template <typename Char, typename OutputIt>
 FMT_NOINLINE FMT_CONSTEXPR auto fill(OutputIt it, size_t n,
@@ -2357,6 +2363,7 @@ FMT_CONSTEXPR auto parse_align(const Char* begin, const Char* end,
   return begin;
 }
 
+#if FMT_SUPPORT_FLOAT
 template <typename Char, typename OutputIt>
 FMT_CONSTEXPR20 auto write_nonfinite(OutputIt out, bool isnan,
                                      format_specs specs, sign s) -> OutputIt {
@@ -3542,6 +3549,7 @@ template <typename Char, typename OutputIt, typename T,
 inline auto write(OutputIt out, T value) -> OutputIt {
   return write<Char>(out, value, format_specs());
 }
+#endif
 
 template <typename Char, typename OutputIt>
 auto write(OutputIt out, monostate, format_specs = {}, locale_ref = {})
@@ -3864,10 +3872,12 @@ template <int N, typename Char>
 struct formatter<detail::ubitint<N>, Char>
     : formatter<unsigned long long, Char> {};
 
+#if FMT_SUPPORT_FLOAT
 template <typename Char>
 struct formatter<detail::float128, Char>
     : detail::native_formatter<detail::float128, Char,
                                detail::type::float_type> {};
+#endif
 
 template <typename T, typename Char>
 struct formatter<T, Char, void_t<detail::format_as_result<T>>>

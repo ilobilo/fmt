@@ -164,6 +164,7 @@ FMT_FUNC auto vsystem_error(int error_code, string_view fmt, format_args args)
   return std::system_error(ec, vformat(fmt, args));
 }
 
+#if FMT_SUPPORT_FLOAT
 namespace detail {
 
 template <typename F>
@@ -1379,6 +1380,7 @@ small_divisor_case_label:
 }
 }  // namespace dragonbox
 }  // namespace detail
+#endif
 
 template <> struct formatter<detail::bigint> {
   FMT_CONSTEXPR auto parse(format_parse_context& ctx)

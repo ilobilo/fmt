@@ -662,12 +662,13 @@ enum class presentation_type : unsigned char {
 
   // String and pointer specifiers:
   pointer = 3,  // 'p'
-
+#if FMT_SUPPORT_FLOAT
   // Floating-point specifiers:
   exp = 1,  // 'e' or 'E' (1 since there is no FP debug presentation)
   fixed,    // 'f' or 'F'
   general,  // 'g' or 'G'
   hexfloat  // 'a' or 'A'
+#endif
 };
 
 enum class align { none, left, right, center, numeric };
@@ -933,14 +934,14 @@ enum class type {
   bool_type,
   char_type,
   last_integer_type = char_type,
+#if FMT_SUPPORT_FLOAT
   // followed by floating-point types.
   float_type,
   double_type,
-#if FMT_USE_LONG_DOUBLE
   long_double_type,
   last_numeric_type = long_double_type,
 #else
-  last_numeric_type = double_type,
+  last_numeric_type = last_integer_type,
 #endif
   cstring_type,
   string_type,
@@ -965,9 +966,9 @@ FMT_TYPE_CONSTANT(int128_opt, int128_type);
 FMT_TYPE_CONSTANT(uint128_opt, uint128_type);
 FMT_TYPE_CONSTANT(bool, bool_type);
 FMT_TYPE_CONSTANT(Char, char_type);
+#if FMT_SUPPORT_FLOAT
 FMT_TYPE_CONSTANT(float, float_type);
 FMT_TYPE_CONSTANT(double, double_type);
-#if FMT_USE_LONG_DOUBLE
 FMT_TYPE_CONSTANT(long double, long_double_type);
 #endif
 FMT_TYPE_CONSTANT(const Char*, cstring_type);
@@ -994,11 +995,9 @@ enum {
              set(type::uint128_type),
   bool_set = set(type::bool_type),
   char_set = set(type::char_type),
-#if FMT_USE_LONG_DOUBLE
+#if FMT_SUPPORT_FLOAT
   float_set = set(type::float_type) | set(type::double_type) |
               set(type::long_double_type),
-#else
-  float_set = set(type::float_type) | set(type::double_type),
 #endif
   string_set = set(type::string_type),
   cstring_set = set(type::cstring_type),
@@ -1135,9 +1134,9 @@ template <typename Char> struct type_mapper {
   static auto map(T) -> conditional_t<
       std::is_same<T, char>::value || std::is_same<T, Char>::value, Char, void>;
 
+#if FMT_SUPPORT_FLOAT
   static auto map(float) -> float;
   static auto map(double) -> double;
-#if FMT_USE_LONG_DOUBLE
   static auto map(long double) -> long double;
 #endif
 
@@ -1452,7 +1451,11 @@ FMT_CONSTEXPR auto parse_format_specs(const Char* begin, const Char* end,
       specs.set_sign(c == ' ' ? sign::space : sign::plus);
       FMT_FALLTHROUGH;
     case '-':
+#if FMT_SUPPORT_FLOAT
       enter_state(state::sign, in(arg_type, sint_set | float_set));
+#else
+      enter_state(state::sign, in(arg_type, sint_set));
+#endif
       ++begin;
       break;
     case '#':
@@ -1479,8 +1482,13 @@ FMT_CONSTEXPR auto parse_format_specs(const Char* begin, const Char* end,
       begin = parse_width(begin, end, specs, specs.width_ref, ctx);
       break;
     case '.':
+#if FMT_SUPPORT_FLOAT
       enter_state(state::precision,
                   in(arg_type, float_set | string_set | cstring_set));
+#else
+      enter_state(state::precision,
+                  in(arg_type, string_set | cstring_set));
+#endif
       begin = parse_precision(begin, end, specs, specs.precision_ref, ctx);
       break;
     case 'L':
@@ -1494,6 +1502,7 @@ FMT_CONSTEXPR auto parse_format_specs(const Char* begin, const Char* end,
     case 'o': return parse_presentation_type(pres::oct, integral_set);
     case 'B': specs.set_upper(); FMT_FALLTHROUGH;
     case 'b': return parse_presentation_type(pres::bin, integral_set);
+#if FMT_SUPPORT_FLOAT
     case 'E': specs.set_upper(); FMT_FALLTHROUGH;
     case 'e': return parse_presentation_type(pres::exp, float_set);
     case 'F': specs.set_upper(); FMT_FALLTHROUGH;
@@ -1502,6 +1511,7 @@ FMT_CONSTEXPR auto parse_format_specs(const Char* begin, const Char* end,
     case 'g': return parse_presentation_type(pres::general, float_set);
     case 'A': specs.set_upper(); FMT_FALLTHROUGH;
     case 'a': return parse_presentation_type(pres::hexfloat, float_set);
+#endif
     case 'c':
       if (arg_type == type::bool_type) report_error("invalid format specifier");
       return parse_presentation_type(pres::chr, integral_set);
@@ -2069,9 +2079,9 @@ template <typename Context> class value {
     uint128_opt uint128_value;
     bool bool_value;
     char_type char_value;
+#if FMT_SUPPORT_FLOAT
     float float_value;
     double double_value;
-#if FMT_USE_LONG_DOUBLE
     long double long_double_value;
 #endif
     const void* pointer;
@@ -2113,9 +2123,9 @@ template <typename Context> class value {
         "mixing character types is disallowed");
   }
 
+#if FMT_SUPPORT_FLOAT
   constexpr FMT_INLINE value(float x FMT_BUILTIN) : float_value(x) {}
   constexpr FMT_INLINE value(double x FMT_BUILTIN) : double_value(x) {}
-#if FMT_USE_LONG_DOUBLE
   FMT_INLINE value(long double x FMT_BUILTIN) : long_double_value(x) {}
 #endif
 
@@ -2463,9 +2473,9 @@ template <typename Context> class basic_format_arg {
     case detail::type::uint128_type:     return vis(map(value_.uint128_value));
     case detail::type::bool_type:        return vis(value_.bool_value);
     case detail::type::char_type:        return vis(value_.char_value);
+#if FMT_SUPPORT_FLOAT
     case detail::type::float_type:       return vis(value_.float_value);
     case detail::type::double_type:      return vis(value_.double_value);
-#if FMT_USE_LONG_DOUBLE
     case detail::type::long_double_type: return vis(value_.long_double_value);
 #endif
     case detail::type::cstring_type:     return vis(value_.string.data);
