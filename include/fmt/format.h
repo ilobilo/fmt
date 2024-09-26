@@ -2664,6 +2664,7 @@ inline FMT_CONSTEXPR20 void adjust_precision(int& precision, int exp10) {
     FMT_THROW(format_error("number is too big"));
   precision += exp10;
 }
+#endif
 
 class bigint {
  private:
@@ -2921,6 +2922,7 @@ class bigint {
   }
 };
 
+#if FMT_SUPPORT_FLOAT
 // format_dragon flags.
 enum dragon {
   predecessor_closer = 1,
