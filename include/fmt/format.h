@@ -119,11 +119,13 @@
 #endif
 
 namespace std {
-template <> struct iterator_traits<fmt::appender> {
+template <class T> struct iterator_traits<fmt::basic_appender<T>> {
   using iterator_category = output_iterator_tag;
-  using value_type = char;
-  using reference = char&;
-  using difference_type = fmt::appender::difference_type;
+  using value_type = T;
+  using difference_type =
+      decltype(static_cast<int*>(nullptr) - static_cast<int*>(nullptr));
+  using pointer = void;
+  using reference = void;
 };
 }  // namespace std
 
@@ -677,7 +679,8 @@ FMT_CONSTEXPR void for_each_codepoint(string_view s, F f) {
   auto num_chars_left = to_unsigned(s.data() + s.size() - p);
   if (num_chars_left == 0) return;
 
-  FMT_ASSERT(num_chars_left < block_size, "");
+  // Suppress bogus -Wstringop-overflow.
+  if (FMT_GCC_VERSION) num_chars_left &= 3;
   char buf[2 * block_size - 1] = {};
   copy<char>(p, p + num_chars_left, buf);
   const char* buf_ptr = buf;
@@ -1003,16 +1006,14 @@ class FMT_SO_VISIBILITY("default") format_error : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-namespace detail_exported {
-#if FMT_USE_NONTYPE_TEMPLATE_ARGS
+namespace detail {
 template <typename Char, size_t N> struct fixed_string {
-  constexpr fixed_string(const Char (&str)[N]) {
-    detail::copy<Char, const Char*, Char*>(static_cast<const Char*>(str),
-                                           str + N, data);
+  FMT_CONSTEXPR20 fixed_string(const Char (&s)[N]) {
+    detail::copy<Char, const Char*, Char*>(static_cast<const Char*>(s), s + N,
+                                           data);
   }
   Char data[N] = {};
 };
-#endif  // FMT_USE_NONTYPE_TEMPLATE_ARGS
 
 // Converts a compile-time string to basic_string_view.
 template <typename Char, size_t N>
@@ -1027,7 +1028,7 @@ constexpr auto compile_string_to_view(basic_string_view<Char> s)
     -> basic_string_view<Char> {
   return s;
 }
-}  // namespace detail_exported
+}  // namespace detail
 
 // A generic formatting context with custom output iterator and character
 // (code unit) support. Char is the format string code unit type which can be
@@ -2682,7 +2683,7 @@ class bigint {
 
   FMT_CONSTEXPR auto get_bigit(int i) const -> bigit {
     return i >= exp_ && i < num_bigits() ? bigits_[i - exp_] : 0;
-  };
+  }
 
   FMT_CONSTEXPR void subtract_bigits(int index, bigit other, bigit& borrow) {
     auto result = double_bigit(bigits_[index]) - other - borrow;
@@ -2798,18 +2799,16 @@ class bigint {
     return *this;
   }
 
-  friend FMT_CONSTEXPR auto compare(const bigint& lhs, const bigint& rhs)
-      -> int {
-    int num_lhs_bigits = lhs.num_bigits(), num_rhs_bigits = rhs.num_bigits();
-    if (num_lhs_bigits != num_rhs_bigits)
-      return num_lhs_bigits > num_rhs_bigits ? 1 : -1;
-    int i = static_cast<int>(lhs.bigits_.size()) - 1;
-    int j = static_cast<int>(rhs.bigits_.size()) - 1;
+  friend FMT_CONSTEXPR auto compare(const bigint& b1, const bigint& b2) -> int {
+    int num_bigits1 = b1.num_bigits(), num_bigits2 = b2.num_bigits();
+    if (num_bigits1 != num_bigits2) return num_bigits1 > num_bigits2 ? 1 : -1;
+    int i = static_cast<int>(b1.bigits_.size()) - 1;
+    int j = static_cast<int>(b2.bigits_.size()) - 1;
     int end = i - j;
     if (end < 0) end = 0;
     for (; i >= end; --i, --j) {
-      bigit lhs_bigit = lhs.bigits_[i], rhs_bigit = rhs.bigits_[j];
-      if (lhs_bigit != rhs_bigit) return lhs_bigit > rhs_bigit ? 1 : -1;
+      bigit b1_bigit = b1.bigits_[i], b2_bigit = b2.bigits_[j];
+      if (b1_bigit != b2_bigit) return b1_bigit > b2_bigit ? 1 : -1;
     }
     if (i != j) return i > j ? 1 : -1;
     return 0;
@@ -2839,10 +2838,8 @@ class bigint {
   FMT_CONSTEXPR20 void assign_pow10(int exp) {
     FMT_ASSERT(exp >= 0, "");
     if (exp == 0) return *this = 1;
-    // Find the top bit.
-    int bitmask = 1;
-    while (exp >= bitmask) bitmask <<= 1;
-    bitmask >>= 1;
+    int bitmask = 1 << (num_bits<unsigned>() -
+                        countl_zero(static_cast<uint32_t>(exp)) - 1);
     // pow(10, exp) = pow(5, exp) * pow(2, exp). First compute pow(5, exp) by
     // repeated squaring and multiplication.
     *this = 5;
@@ -3710,7 +3707,7 @@ FMT_CONSTEXPR void handle_dynamic_spec(
 
 #if FMT_USE_NONTYPE_TEMPLATE_ARGS
 template <typename T, typename Char, size_t N,
-          fmt::detail_exported::fixed_string<Char, N> Str>
+          fmt::detail::fixed_string<Char, N> Str>
 struct static_named_arg : view {
   static constexpr auto name = Str.data;
 
@@ -3719,16 +3716,15 @@ struct static_named_arg : view {
 };
 
 template <typename T, typename Char, size_t N,
-          fmt::detail_exported::fixed_string<Char, N> Str>
+          fmt::detail::fixed_string<Char, N> Str>
 struct is_named_arg<static_named_arg<T, Char, N, Str>> : std::true_type {};
 
 template <typename T, typename Char, size_t N,
-          fmt::detail_exported::fixed_string<Char, N> Str>
+          fmt::detail::fixed_string<Char, N> Str>
 struct is_static_named_arg<static_named_arg<T, Char, N, Str>> : std::true_type {
 };
 
-template <typename Char, size_t N,
-          fmt::detail_exported::fixed_string<Char, N> Str>
+template <typename Char, size_t N, fmt::detail::fixed_string<Char, N> Str>
 struct udl_arg {
   template <typename T> auto operator=(T&& value) const {
     return static_named_arg<T, Char, N, Str>(std::forward<T>(value));
@@ -4059,7 +4055,7 @@ template <typename T, typename Char = char> struct nested_formatter {
 
 inline namespace literals {
 #if FMT_USE_NONTYPE_TEMPLATE_ARGS
-template <detail_exported::fixed_string Str> constexpr auto operator""_a() {
+template <detail::fixed_string Str> constexpr auto operator""_a() {
   using char_t = remove_cvref_t<decltype(Str.data[0])>;
   return detail::udl_arg<char_t, sizeof(Str.data) / sizeof(char_t), Str>();
 }
@@ -4144,7 +4140,7 @@ class format_int {
       using char_type = fmt::remove_cvref_t<decltype(s[0])>;               \
       FMT_CONSTEXPR explicit operator fmt::basic_string_view<char_type>()  \
           const {                                                          \
-        return fmt::detail_exported::compile_string_to_view<char_type>(s); \
+        return fmt::detail::compile_string_to_view<char_type>(s);          \
       }                                                                    \
     };                                                                     \
     using FMT_STRING_VIEW =                                                \

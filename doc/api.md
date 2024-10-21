@@ -375,18 +375,17 @@ allocator:
     using custom_string =
       std::basic_string<char, std::char_traits<char>, custom_allocator>;
 
-    custom_string vformat(custom_allocator alloc, fmt::string_view format_str,
-                          fmt::format_args args) {
+    auto vformat(custom_allocator alloc, fmt::string_view fmt,
+                 fmt::format_args args) -> custom_string {
       auto buf = custom_memory_buffer(alloc);
-      fmt::vformat_to(std::back_inserter(buf), format_str, args);
+      fmt::vformat_to(std::back_inserter(buf), fmt, args);
       return custom_string(buf.data(), buf.size(), alloc);
     }
 
     template <typename ...Args>
-    inline custom_string format(custom_allocator alloc,
-                                fmt::string_view format_str,
-                                const Args& ... args) {
-      return vformat(alloc, format_str, fmt::make_format_args(args...));
+    auto format(custom_allocator alloc, fmt::string_view fmt,
+                const Args& ... args) -> custom_string {
+      return vformat(alloc, fmt, fmt::make_format_args(args...));
     }
 
 The allocator will be used for the output container only. Formatting
@@ -498,10 +497,13 @@ chrono-format-specifications).
 - [`std::atomic_flag`](https://en.cppreference.com/w/cpp/atomic/atomic_flag)
 - [`std::bitset`](https://en.cppreference.com/w/cpp/utility/bitset)
 - [`std::error_code`](https://en.cppreference.com/w/cpp/error/error_code)
+- [`std::exception`](https://en.cppreference.com/w/cpp/error/exception)
 - [`std::filesystem::path`](https://en.cppreference.com/w/cpp/filesystem/path)
-- [`std::monostate`](https://en.cppreference.com/w/cpp/utility/variant/monostate)
+- [`std::monostate`](
+  https://en.cppreference.com/w/cpp/utility/variant/monostate)
 - [`std::optional`](https://en.cppreference.com/w/cpp/utility/optional)
-- [`std::source_location`](https://en.cppreference.com/w/cpp/utility/source_location)
+- [`std::source_location`](
+  https://en.cppreference.com/w/cpp/utility/source_location)
 - [`std::thread::id`](https://en.cppreference.com/w/cpp/thread/thread/id)
 - [`std::variant`](https://en.cppreference.com/w/cpp/utility/variant/variant)
 

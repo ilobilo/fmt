@@ -722,7 +722,7 @@ class basic_specs {
     max_fill_size = 4
   };
 
-  unsigned long data_ = 1 << fill_size_shift;
+  size_t data_ = 1 << fill_size_shift;
 
   // Character (code unit) type is erased to prevent template bloat.
   char fill_data_[max_fill_size] = {' '};
@@ -801,7 +801,8 @@ class basic_specs {
   template <typename Char> constexpr auto fill_unit() const -> Char {
     using uchar = unsigned char;
     return static_cast<Char>(static_cast<uchar>(fill_data_[0]) |
-                             (static_cast<uchar>(fill_data_[1]) << 8));
+                             (static_cast<uchar>(fill_data_[1]) << 8) |
+                             (static_cast<uchar>(fill_data_[2]) << 16));
   }
 
   FMT_CONSTEXPR void set_fill(char c) {
@@ -817,6 +818,7 @@ class basic_specs {
       unsigned uchar = static_cast<detail::unsigned_char<Char>>(s[0]);
       fill_data_[0] = static_cast<char>(uchar);
       fill_data_[1] = static_cast<char>(uchar >> 8);
+      fill_data_[2] = static_cast<char>(uchar >> 16);
       return;
     }
     FMT_ASSERT(size <= max_fill_size, "invalid fill");
@@ -2408,11 +2410,6 @@ template <typename T> class basic_appender {
   detail::buffer<T>* container;
 
  public:
-  using iterator_category = int;
-  using value_type = T;
-  using pointer = T*;
-  using reference = T&;
-  using difference_type = decltype(pointer() - pointer());
   using container_type = detail::buffer<T>;
 
   FMT_CONSTEXPR basic_appender(detail::buffer<T>& buf) : container(&buf) {}
@@ -2695,7 +2692,7 @@ template <typename... T> struct fstring {
   template <typename S,
             FMT_ENABLE_IF(std::is_convertible<const S&, string_view>::value)>
   FMT_CONSTEVAL FMT_ALWAYS_INLINE fstring(const S& s) : str(s) {
-    FMT_CONSTEXPR auto sv = string_view(S());
+    auto sv = string_view(str);
     if (FMT_USE_CONSTEVAL)
       detail::parse_format_string<char>(sv, checker(sv, arg_pack()));
 #ifdef FMT_ENFORCE_COMPILE_STRING
