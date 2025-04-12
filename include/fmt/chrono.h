@@ -22,21 +22,6 @@
 
 #include "format.h"
 
-namespace fmt_detail {
-struct time_zone {
-  template <typename Duration, typename T>
-  auto to_sys(T)
-      -> std::chrono::time_point<std::chrono::system_clock, Duration> {
-    return {};
-  }
-};
-template <typename... T> inline auto current_zone(T...) -> time_zone* {
-  return nullptr;
-}
-
-template <typename... T> inline void _tzset(T...) {}
-}  // namespace fmt_detail
-
 FMT_BEGIN_NAMESPACE
 
 // Enable safe chrono durations, unless explicitly disabled.
@@ -261,7 +246,7 @@ namespace detail {
 using utc_clock = std::chrono::utc_clock;
 #else
 struct utc_clock {
-  void to_sys();
+  template <typename T> void to_sys(T);
 };
 #endif
 
@@ -364,7 +349,7 @@ void write_codecvt(codecvt_result<CodeUnit>& out, string_view in,
 template <typename OutputIt>
 auto write_encoded_tm_str(OutputIt out, string_view in, const std::locale& loc)
     -> OutputIt {
-  if (detail::use_utf8 && loc != get_classic_locale()) {
+  if (const_check(detail::use_utf8) && loc != get_classic_locale()) {
     // char16_t and char32_t codecvts are broken in MSVC (linkage errors) and
     // gcc-4.
 #if FMT_MSC_VERSION != 0 ||  \
@@ -519,12 +504,29 @@ auto to_time_t(sys_time<Duration> time_point) -> std::time_t {
       .count();
 }
 
-// Workaround a bug in libstdc++ which sets __cpp_lib_chrono to 201907 without
-// providing current_zone(): https://github.com/fmtlib/fmt/issues/4160.
-template <typename T> FMT_CONSTEXPR auto has_current_zone() -> bool {
-  using namespace std::chrono;
-  using namespace fmt_detail;
-  return !std::is_same<decltype(current_zone()), fmt_detail::time_zone*>::value;
+namespace tz {
+
+// DEPRECATED!
+struct time_zone {
+  template <typename Duration, typename LocalTime>
+  auto to_sys(LocalTime) -> sys_time<Duration> {
+    return {};
+  }
+};
+template <typename... T> auto current_zone(T...) -> time_zone* {
+  return nullptr;
+}
+
+template <typename... T> void _tzset(T...) {}
+}  // namespace tz
+
+inline void tzset_once() {
+  static bool init = []() {
+    using namespace tz;
+    _tzset();
+    return false;
+  }();
+  ignore_unused(init);
 }
 }  // namespace detail
 
@@ -535,7 +537,7 @@ FMT_BEGIN_EXPORT
  * expressed in local time. Unlike `std::localtime`, this function is
  * thread-safe on most platforms.
  */
-inline auto localtime(std::time_t time) -> std::tm {
+FMT_DEPRECATED inline auto localtime(std::time_t time) -> std::tm {
   struct dispatcher {
     std::time_t time_;
     std::tm tm_;
@@ -572,11 +574,11 @@ inline auto localtime(std::time_t time) -> std::tm {
 }
 
 #if FMT_USE_LOCAL_TIME
-template <typename Duration,
-          FMT_ENABLE_IF(detail::has_current_zone<Duration>())>
-inline auto localtime(std::chrono::local_time<Duration> time) -> std::tm {
+template <typename Duration>
+FMT_DEPRECATED auto localtime(std::chrono::local_time<Duration> time)
+    -> std::tm {
   using namespace std::chrono;
-  using namespace fmt_detail;
+  using namespace detail::tz;
   return localtime(detail::to_time_t(current_zone()->to_sys<Duration>(time)));
 }
 #endif
@@ -911,7 +913,14 @@ template <typename Derived> struct null_chrono_spec_handler {
   FMT_CONSTEXPR void on_tz_name() { unsupported(); }
 };
 
-struct tm_format_checker : null_chrono_spec_handler<tm_format_checker> {
+class tm_format_checker : public null_chrono_spec_handler<tm_format_checker> {
+ private:
+  bool no_timezone_ = false;
+
+ public:
+  constexpr explicit tm_format_checker(bool no_timezone = false)
+      : no_timezone_(no_timezone) {}
+
   FMT_NORETURN inline void unsupported() {
     FMT_THROW(format_error("no format"));
   }
@@ -949,8 +958,12 @@ struct tm_format_checker : null_chrono_spec_handler<tm_format_checker> {
   FMT_CONSTEXPR void on_24_hour_time() {}
   FMT_CONSTEXPR void on_iso_time() {}
   FMT_CONSTEXPR void on_am_pm() {}
-  FMT_CONSTEXPR void on_utc_offset(numeric_system) {}
-  FMT_CONSTEXPR void on_tz_name() {}
+  FMT_CONSTEXPR void on_utc_offset(numeric_system) {
+    if (no_timezone_) FMT_THROW(format_error("no timezone"));
+  }
+  FMT_CONSTEXPR void on_tz_name() {
+    if (no_timezone_) FMT_THROW(format_error("no timezone"));
+  }
 };
 
 inline auto tm_wday_full_name(int wday) -> const char* {
@@ -991,21 +1004,12 @@ template <typename T>
 struct has_member_data_tm_zone<T, void_t<decltype(T::tm_zone)>>
     : std::true_type {};
 
-inline void tzset_once() {
-  static bool init = []() {
-    using namespace fmt_detail;
-    _tzset();
-    return false;
-  }();
-  ignore_unused(init);
-}
-
 // Converts value to Int and checks that it's in the range [0, upper).
 template <typename T, typename Int, FMT_ENABLE_IF(std::is_integral<T>::value)>
 inline auto to_nonnegative_int(T value, Int upper) -> Int {
   if (!std::is_unsigned<Int>::value &&
       (value < 0 || to_unsigned(value) > to_unsigned(upper))) {
-    FMT_THROW(fmt::format_error("chrono value is out of range"));
+    FMT_THROW(format_error("chrono value is out of range"));
   }
   return static_cast<Int>(value);
 }
@@ -1264,28 +1268,8 @@ class tm_writer {
     write_utc_offset(tm.tm_gmtoff, ns);
   }
   template <typename T, FMT_ENABLE_IF(!has_member_data_tm_gmtoff<T>::value)>
-  void format_utc_offset_impl(const T& tm, numeric_system ns) {
-#if defined(_WIN32) && defined(_UCRT)
-    tzset_once();
-    long offset = 0;
-    _get_timezone(&offset);
-    if (tm.tm_isdst) {
-      long dstbias = 0;
-      _get_dstbias(&dstbias);
-      offset += dstbias;
-    }
-    write_utc_offset(-offset, ns);
-#else
-    if (ns == numeric_system::standard) return format_localized('z');
-
-    // Extract timezone offset from timezone conversion functions.
-    std::tm gtm = tm;
-    std::time_t gt = std::mktime(&gtm);
-    std::tm ltm = gmtime(gt);
-    std::time_t lt = std::mktime(&ltm);
-    long long offset = gt - lt;
-    write_utc_offset(offset, ns);
-#endif
+  void format_utc_offset_impl(const T&, numeric_system ns) {
+    write_utc_offset(0, ns);
   }
 
   template <typename T, FMT_ENABLE_IF(has_member_data_tm_zone<T>::value)>
@@ -2242,8 +2226,8 @@ template <typename Char> struct formatter<std::tm, Char> {
         ctx.out(), basic_string_view<Char>(buf.data(), buf.size()), specs);
   }
 
- public:
-  FMT_CONSTEXPR auto parse(parse_context<Char>& ctx) -> const Char* {
+  FMT_CONSTEXPR auto do_parse(parse_context<Char>& ctx,
+                              bool no_timezone = false) -> const Char* {
     auto it = ctx.begin(), end = ctx.end();
     if (it == end || *it == '}') return it;
 
@@ -2256,10 +2240,16 @@ template <typename Char> struct formatter<std::tm, Char> {
       if (it == end) return it;
     }
 
-    end = detail::parse_chrono_format(it, end, detail::tm_format_checker());
+    end = detail::parse_chrono_format(it, end,
+                                      detail::tm_format_checker(no_timezone));
     // Replace the default format string only if the new spec is not empty.
     if (end != it) fmt_ = {it, detail::to_unsigned(end - it)};
     return end;
+  }
+
+ public:
+  FMT_CONSTEXPR auto parse(parse_context<Char>& ctx) -> const Char* {
+    return do_parse(ctx);
   }
 
   template <typename FormatContext>
@@ -2317,18 +2307,27 @@ struct formatter<local_time<Duration>, Char> : formatter<std::tm, Char> {
     this->fmt_ = detail::string_literal<Char, '%', 'F', ' ', '%', 'T'>();
   }
 
+  FMT_CONSTEXPR auto parse(parse_context<Char>& ctx) -> const Char* {
+    return this->do_parse(ctx, true);
+  }
+
   template <typename FormatContext>
   auto format(local_time<Duration> val, FormatContext& ctx) const
       -> decltype(ctx.out()) {
+    auto time_since_epoch = val.time_since_epoch();
+    auto seconds_since_epoch =
+        detail::duration_cast<std::chrono::seconds>(time_since_epoch);
+    // Use gmtime to prevent time conversion since local_time has an
+    // unspecified time zone.
+    auto t = gmtime(seconds_since_epoch.count());
     using period = typename Duration::period;
     if (period::num == 1 && period::den == 1 &&
         !std::is_floating_point<typename Duration::rep>::value) {
-      return formatter<std::tm, Char>::format(localtime(val), ctx);
+      return formatter<std::tm, Char>::format(t, ctx);
     }
-    auto epoch = val.time_since_epoch();
-    auto subsecs = detail::duration_cast<Duration>(
-        epoch - detail::duration_cast<std::chrono::seconds>(epoch));
-    return formatter<std::tm, Char>::do_format(localtime(val), ctx, &subsecs);
+    auto subsecs =
+        detail::duration_cast<Duration>(time_since_epoch - seconds_since_epoch);
+    return formatter<std::tm, Char>::do_format(t, ctx, &subsecs);
   }
 };
 

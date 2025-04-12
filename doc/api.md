@@ -269,17 +269,15 @@ that support C++20 `consteval`. On older compilers you can use the
 
 Unused arguments are allowed as in Python's `str.format` and ordinary functions.
 
-::: basic_format_string
+See [Type Erasure](#type-erasure) for an example of how to enable compile-time
+checks in your own functions with `fmt::format_string` while avoiding template
+bloat.
+
+::: fstring
 
 ::: format_string
 
 ::: runtime(string_view)
-
-### Named Arguments
-
-::: arg(const Char*, const T&)
-
-Named arguments are not supported in compile-time checks at the moment.
 
 ### Type Erasure
 
@@ -316,6 +314,12 @@ parameterized version.
 ::: format_args
 
 ::: basic_format_arg
+
+### Named Arguments
+
+::: arg(const Char*, const T&)
+
+Named arguments are not supported in compile-time checks at the moment.
 
 ### Compatibility
 
@@ -409,11 +413,11 @@ locale:
 that take `std::locale` as a parameter. The locale type is a template
 parameter to avoid the expensive `<locale>` include.
 
-::: format(detail::locale_ref, format_string<T...>, T&&...)
+::: format(const Locale&, format_string<T...>, T&&...)
 
-::: format_to(OutputIt, detail::locale_ref, format_string<T...>, T&&...)
+::: format_to(OutputIt, const Locale&, format_string<T...>, T&&...)
 
-::: formatted_size(detail::locale_ref, format_string<T...>, T&&...)
+::: formatted_size(const Locale&, format_string<T...>, T&&...)
 
 <a id="legacy-checks"></a>
 ### Legacy Compile-Time Checks
@@ -547,12 +551,12 @@ This is a known limitation of "perfect" forwarding in C++.
 <a id="compile-api"></a>
 ## Format String Compilation
 
-`fmt/compile.h` provides format string compilation enabled via the
-`FMT_COMPILE` macro or the `_cf` user-defined literal defined in
-namespace `fmt::literals`. Format strings marked with `FMT_COMPILE`
-or `_cf` are parsed, checked and converted into efficient formatting
-code at compile-time. This supports arguments of built-in and string
-types as well as user-defined types with `format` functions taking
+`fmt/compile.h` provides format string compilation and compile-time
+(`constexpr`) formatting enabled via the `FMT_COMPILE` macro or the `_cf`
+user-defined literal defined in namespace `fmt::literals`. Format strings
+marked with `FMT_COMPILE` or `_cf` are parsed, checked and converted into
+efficient formatting code at compile-time. This supports arguments of built-in
+and string types as well as user-defined types with `format` functions taking
 the format context type as a template parameter in their `formatter`
 specializations. For example:
 
@@ -576,7 +580,7 @@ performance bottleneck.
 
 `fmt/color.h` provides support for terminal color and text style output.
 
-::: print(const text_style&, format_string<T...>, T&&...)
+::: print(text_style, format_string<T...>, T&&...)
 
 ::: fg(detail::color_type)
 
@@ -665,5 +669,13 @@ following differences:
 
 - Names are defined in the `fmt` namespace instead of `std` to avoid
   collisions with standard library implementations.
+
 - Width calculation doesn't use grapheme clusterization. The latter has
   been implemented in a separate branch but hasn't been integrated yet.
+
+- The default floating-point representation in {fmt} uses the smallest
+  precision that provides round-trip guarantees similarly to other languages
+  like Java and Python. `std::format` is currently specified in terms of
+  `std::to_chars` which tries to generate the smallest number of characters
+  (ignoring redundant digits and sign in exponent) and may procude more
+  decimal digits than necessary.
