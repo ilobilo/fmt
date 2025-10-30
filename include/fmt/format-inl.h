@@ -135,7 +135,7 @@ FMT_FUNC auto write_loc(appender out, loc_value value,
 #endif
 }  // namespace detail
 
-FMT_FUNC void report_error(const char* message) {
+FMT_FUNC void report_error([[maybe_unused]] const char* message) {
 #if FMT_MSC_VERSION || defined(__NVCC__)
   // Silence unreachable code warnings in MSVC and NVCC because these
   // are nearly impossible to fix in a generic code.
