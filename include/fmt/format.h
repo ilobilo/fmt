@@ -49,7 +49,9 @@
 #ifndef FMT_MODULE
 #  include <stdlib.h>  // malloc, free
 
-#  include <cmath>    // std::signbit
+#  if !FMT_FULLY_FREESTANDING
+#    include <cmath>    // std::signbit
+#  endif
 #  include <cstddef>  // std::byte
 #  include <cstdint>  // uint32_t
 #  include <cstring>  // std::memcpy
@@ -59,9 +61,11 @@
 // Workaround for pre gcc 5 libstdc++.
 #    include <memory>  // std::allocator_traits
 #  endif
-#  include <stdexcept>     // std::runtime_error
+#  if !FMT_FULLY_FREESTANDING
+#    include <stdexcept>     // std::runtime_error
+#    include <system_error>  // std::system_error
+#  endif
 #  include <string>        // std::string
-#  include <system_error>  // std::system_error
 
 // Check FMT_CPLUSPLUS to avoid a warning in MSVC.
 #  if FMT_HAS_INCLUDE(<bit>) && FMT_CPLUSPLUS > 201703L
@@ -435,6 +439,7 @@ template <> constexpr auto num_bits<int128_opt>() -> int { return 128; }
 template <> constexpr auto num_bits<uint128_opt>() -> int { return 128; }
 template <> constexpr auto num_bits<uint128_fallback>() -> int { return 128; }
 
+#if FMT_SUPPORT_FLOAT
 // A heterogeneous bit_cast used for converting 96-bit long double to uint128_t
 // and 128-bit pointers to uint128_fallback.
 template <typename To, typename From, FMT_ENABLE_IF(sizeof(To) > sizeof(From))>
@@ -453,6 +458,7 @@ inline auto bit_cast(const From& from) -> To {
   }
   return result;
 }
+#endif
 
 template <typename UInt>
 FMT_CONSTEXPR20 inline auto countl_zero_fallback(UInt n) -> int {
@@ -922,6 +928,7 @@ FMT_NODISCARD auto to_string(const basic_memory_buffer<char, SIZE>& buf)
   return {buf.data(), size};
 }
 
+#if !FMT_FULLY_FREESTANDING
 // A writer to a buffered stream. It doesn't own the underlying stream.
 class writer {
  private:
@@ -944,6 +951,7 @@ class writer {
       fmt::print(file_, fmt, std::forward<T>(args)...);
   }
 };
+#endif
 
 class string_buffer {
  private:
@@ -953,7 +961,9 @@ class string_buffer {
  public:
   inline string_buffer() : buf_(str_) {}
 
+#if !FMT_FULLY_FREESTANDING
   inline operator writer() { return buf_; }
+#endif
   inline auto str() -> std::string& { return str_; }
 };
 
@@ -964,19 +974,24 @@ struct is_contiguous<basic_memory_buffer<T, SIZE, Allocator>> : std::true_type {
 // Suppress a misleading warning in older versions of clang.
 FMT_PRAGMA_CLANG(diagnostic ignored "-Wweak-vtables")
 
+#if !FMT_FULLY_FREESTANDING
 /// An error reported from a formatting function.
 class FMT_SO_VISIBILITY("default") format_error : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
 };
+#endif
 
 class loc_value;
 
 FMT_END_EXPORT
+
+#if !FMT_FULLY_FREESTANDING
 namespace detail {
 FMT_API auto write_console(int fd, string_view text) -> bool;
 FMT_API void print(FILE*, string_view);
 }  // namespace detail
+#endif
 
 namespace detail {
 template <typename Char, size_t N> struct fixed_string {
@@ -1416,6 +1431,7 @@ FMT_INLINE auto umul128(uint64_t x, uint64_t y) noexcept -> uint128_fallback {
 #endif
 }
 
+#if FMT_SUPPORT_FLOAT
 namespace dragonbox {
 // Computes floor(log10(pow(2, e))) for e in [-2620, 2620] using the method from
 // https://fmt.dev/papers/Dragonbox.pdf#page=28, section 6.1.
@@ -1632,6 +1648,7 @@ FMT_CONSTEXPR auto normalize(basic_fp<F> value) -> basic_fp<F> {
   value.e -= offset;
   return value;
 }
+#endif
 
 // Computes lhs * rhs / pow(2, 64) rounded to nearest with half-up tie breaking.
 FMT_CONSTEXPR inline auto multiply(uint64_t lhs, uint64_t rhs) -> uint64_t {
@@ -1651,6 +1668,7 @@ FMT_CONSTEXPR inline auto multiply(uint64_t lhs, uint64_t rhs) -> uint64_t {
 #endif
 }
 
+#if FMT_SUPPORT_FLOAT
 FMT_CONSTEXPR inline auto operator*(fp x, fp y) -> fp {
   return {multiply(x.f, y.f), x.e + y.e + 64};
 }
@@ -1663,6 +1681,7 @@ template <typename T>
 constexpr auto convert_float(T value) -> convert_float_result<T> {
   return static_cast<convert_float_result<T>>(value);
 }
+#endif
 
 template <bool C, typename T, typename F, FMT_ENABLE_IF(C)>
 auto select(T true_value, F) -> T {
@@ -2349,6 +2368,7 @@ FMT_CONSTEXPR auto parse_align(const Char* begin, const Char* end,
   return begin;
 }
 
+#if FMT_SUPPORT_FLOAT
 template <typename Char, typename OutputIt>
 FMT_CONSTEXPR20 auto write_nonfinite(OutputIt out, bool isnan,
                                      format_specs specs, sign s) -> OutputIt {
@@ -2664,6 +2684,7 @@ inline FMT_CONSTEXPR20 void adjust_precision(int& precision, int exp10) {
     FMT_THROW(format_error("number is too big"));
   precision += exp10;
 }
+#endif
 
 class bigint {
  private:
@@ -2905,6 +2926,7 @@ class bigint {
   }
 };
 
+#if FMT_SUPPORT_FLOAT
 // format_dragon flags.
 enum dragon {
   predecessor_closer = 1,
@@ -3575,6 +3597,7 @@ template <typename Char, typename OutputIt, typename T,
 inline auto write(OutputIt out, T value) -> OutputIt {
   return write<Char>(out, value, {});
 }
+#endif
 
 template <typename Char, typename OutputIt>
 auto write(OutputIt out, monostate, format_specs = {}, locale_ref = {})
@@ -3954,10 +3977,12 @@ template <int N, typename Char>
 struct formatter<detail::ubitint<N>, Char>
     : formatter<unsigned long long, Char> {};
 
+#if FMT_SUPPORT_FLOAT
 template <typename Char>
 struct formatter<detail::float128, Char>
     : detail::native_formatter<detail::float128, Char,
                                detail::type::float_type> {};
+#endif
 
 template <typename T, typename Char>
 struct formatter<T, Char, void_t<detail::format_as_result<T>>>
@@ -4259,6 +4284,7 @@ class format_int {
 #  define FMT_STRING(s) FMT_STRING_IMPL(s, fmt::detail::compile_string)
 #endif  // FMT_USE_CONSTEVAL
 
+#if !FMT_FULLY_FREESTANDING
 FMT_API auto vsystem_error(int error_code, string_view fmt, format_args args)
     -> std::system_error;
 
@@ -4302,6 +4328,7 @@ FMT_API void format_system_error(detail::buffer<char>& out, int error_code,
 // Reports a system error without throwing an exception.
 // Can be used to report errors from destructors.
 FMT_API void report_system_error(int error_code, const char* message) noexcept;
+#endif
 
 inline auto vformat(locale_ref loc, string_view fmt, format_args args)
     -> std::string {

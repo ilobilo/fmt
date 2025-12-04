@@ -10,10 +10,12 @@
 
 #ifndef FMT_MODULE
 #  include <algorithm>
+#  if !FMT_FULLY_FREESTANDING
 #  include <cerrno>  // errno
+#    include <cmath>
+#    include <exception>
+#  endif
 #  include <climits>
-#  include <cmath>
-#  include <exception>
 #endif
 
 #if defined(_WIN32) && !defined(FMT_USE_WRITE_CONSOLE)
@@ -42,9 +44,13 @@ FMT_BEGIN_NAMESPACE
 
 #ifndef FMT_CUSTOM_ASSERT_FAIL
 FMT_FUNC void assert_fail(const char* file, int line, const char* message) {
+#if !FMT_FULLY_FREESTANDING
   // Use unchecked std::fprintf to avoid triggering another assertion when
   // writing to stderr fails.
   std::fprintf(stderr, "%s:%d: assertion failed: %s", file, line, message);
+#else
+  (void)file; (void)line; (void)message;
+#endif
   abort();
 }
 #endif
@@ -101,6 +107,7 @@ FMT_FUNC void format_error_code(detail::buffer<char>& out, int error_code,
   FMT_ASSERT(out.size() <= inline_buffer_size, "");
 }
 
+#if !FMT_FULLY_FREESTANDING
 FMT_FUNC void do_report_error(format_func func, int error_code,
                               const char* message) noexcept {
   memory_buffer full_message;
@@ -116,6 +123,7 @@ inline void fwrite_all(const void* ptr, size_t count, FILE* stream) {
   if (written < count)
     FMT_THROW(system_error(errno, FMT_STRING("cannot write to file")));
 }
+#endif
 
 template <typename Char>
 FMT_FUNC auto thousands_sep_impl(locale_ref loc) -> thousands_sep_result<Char> {
@@ -143,7 +151,7 @@ FMT_FUNC auto write_loc(appender out, loc_value value,
 #endif
 }  // namespace detail
 
-FMT_FUNC void report_error(const char* message) {
+FMT_FUNC void report_error([[maybe_unused]] const char* message) {
 #if FMT_MSC_VERSION || defined(__NVCC__)
   // Silence unreachable code warnings in MSVC and NVCC because these
   // are nearly impossible to fix in a generic code.
@@ -170,12 +178,15 @@ FMT_API FMT_FUNC auto format_facet<std::locale>::do_put(
 }
 #endif
 
+#if !FMT_FULLY_FREESTANDING
 FMT_FUNC auto vsystem_error(int error_code, string_view fmt, format_args args)
     -> std::system_error {
   auto ec = std::error_code(error_code, std::generic_category());
   return std::system_error(ec, vformat(fmt, args));
 }
+#endif
 
+#if FMT_SUPPORT_FLOAT
 namespace detail {
 
 template <typename F>
@@ -1388,6 +1399,7 @@ small_divisor_case_label:
 }
 }  // namespace dragonbox
 }  // namespace detail
+#endif
 
 template <> struct formatter<detail::bigint> {
   FMT_CONSTEXPR auto parse(format_parse_context& ctx)
@@ -1430,6 +1442,7 @@ FMT_FUNC detail::utf8_to_utf16::utf8_to_utf16(string_view s) {
   buffer_.push_back(0);
 }
 
+#if !FMT_FULLY_FREESTANDING
 FMT_FUNC void format_system_error(detail::buffer<char>& out, int error_code,
                                   const char* message) noexcept {
   FMT_TRY {
@@ -1445,6 +1458,7 @@ FMT_FUNC void report_system_error(int error_code,
                                   const char* message) noexcept {
   do_report_error(format_system_error, error_code, message);
 }
+#endif
 
 FMT_FUNC auto vformat(string_view fmt, format_args args) -> std::string {
   // Don't optimize the "{}" case to keep the binary size small and because it
@@ -1483,6 +1497,7 @@ template <typename F> auto getc_unlocked(F* f) -> decltype(_fgetc_nolock(f)) {
 }
 #endif
 
+#if !FMT_FULLY_FREESTANDING
 template <typename F = FILE, typename Enable = void>
 struct has_flockfile : std::false_type {};
 
@@ -1759,6 +1774,9 @@ FMT_FUNC void vprintln(std::FILE* f, string_view fmt, format_args args) {
 FMT_FUNC void vprint(string_view fmt, format_args args) {
   vprint(stdout, fmt, args);
 }
+#else
+}  // namespace detail
+#endif
 
 namespace detail {
 

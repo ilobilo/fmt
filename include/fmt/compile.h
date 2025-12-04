@@ -534,6 +534,7 @@ FMT_CONSTEXPR20 auto formatted_size(const S& fmt, T&&... args) -> size_t {
   return buf.count();
 }
 
+#if !FMT_FULLY_FREESTANDING
 template <typename S, typename... T,
           FMT_ENABLE_IF(is_compiled_string<S>::value)>
 void print(std::FILE* f, const S& fmt, T&&... args) {
@@ -547,6 +548,7 @@ template <typename S, typename... T,
 void print(const S& fmt, T&&... args) {
   print(stdout, fmt, std::forward<T>(args)...);
 }
+#endif
 
 template <size_t N> class static_format_result {
  private:
