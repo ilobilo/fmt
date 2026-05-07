@@ -276,10 +276,12 @@ class printf_arg_formatter : public arg_formatter<Char> {
     detail::write<Char>(this->out, static_cast<Char>(value), s);
   }
 
+#if FMT_SUPPORT_FLOAT
   template <typename T, FMT_ENABLE_IF(std::is_floating_point<T>::value)>
   void operator()(T value) {
     write(value);
   }
+#endif
 
   void operator()(const char* value) {
     if (value)
@@ -373,6 +375,7 @@ inline auto parse_printf_presentation_type(char c, type t, bool& upper)
   case 'o': return in(t, integral_set) ? pt::oct : pt::none;
   case 'X': upper = true; FMT_FALLTHROUGH;
   case 'x': return in(t, integral_set) ? pt::hex : pt::none;
+#if FMT_SUPPORT_FLOAT
   case 'E': upper = true; FMT_FALLTHROUGH;
   case 'e': return in(t, float_set) ? pt::exp : pt::none;
   case 'F': upper = true; FMT_FALLTHROUGH;
@@ -381,6 +384,7 @@ inline auto parse_printf_presentation_type(char c, type t, bool& upper)
   case 'g': return in(t, float_set) ? pt::general : pt::none;
   case 'A': upper = true; FMT_FALLTHROUGH;
   case 'a': return in(t, float_set) ? pt::hexfloat : pt::none;
+#endif
   case 'c': return in(t, integral_set) ? pt::chr : pt::none;
   case 's': return in(t, string_set | cstring_set) ? pt::string : pt::none;
   case 'p': return in(t, pointer_set | cstring_set) ? pt::pointer : pt::none;
@@ -576,6 +580,7 @@ FMT_DEPRECATED auto sprintf(basic_string_view<wchar_t> fmt, const T&... args)
   return vsprintf(fmt, make_printf_args<wchar_t>(args...));
 }
 
+#if !FMT_FULLY_FREESTANDING
 template <typename Char>
 auto vfprintf(std::FILE* f, basic_string_view<Char> fmt,
               typename vprintf_args<Char>::type args) -> int {
@@ -617,6 +622,7 @@ template <typename... T>
 inline auto printf(string_view fmt, const T&... args) -> int {
   return vfprintf(stdout, fmt, make_printf_args(args...));
 }
+#endif
 
 FMT_END_EXPORT
 FMT_END_NAMESPACE

@@ -494,6 +494,7 @@ void vformat_to(buffer<Char>& buf, text_style ts, basic_string_view<Char> fmt,
 }
 }  // namespace detail
 
+#if !FMT_FULLY_FREESTANDING
 inline void vprint(FILE* f, text_style ts, string_view fmt, format_args args) {
   auto buf = memory_buffer();
   detail::vformat_to(buf, ts, fmt, args);
@@ -527,6 +528,7 @@ template <typename... T>
 void print(text_style ts, format_string<T...> fmt, T&&... args) {
   return print(stdout, ts, fmt, std::forward<T>(args)...);
 }
+#endif
 
 inline auto vformat(text_style ts, string_view fmt, format_args args)
     -> std::string {
