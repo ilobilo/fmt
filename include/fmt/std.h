@@ -9,17 +9,21 @@
 #define FMT_STD_H_
 
 #include "format.h"
-#include "ostream.h"
+#if !FMT_FULLY_FREESTANDING
+#  include "ostream.h"
+#endif
 
 #ifndef FMT_MODULE
 #  include <atomic>
 #  include <bitset>
-#  include <complex>
+#  if !FMT_FULLY_FREESTANDING
+#    include <complex>
+#    include <thread>
+#  endif
 #  include <cstddef>     // std::byte
 #  include <exception>   // std::exception
 #  include <functional>  // std::reference_wrapper
 #  include <memory>
-#  include <thread>
 #  include <type_traits>
 #  include <typeinfo>  // std::type_info
 #  include <utility>   // std::make_index_sequence
@@ -392,8 +396,10 @@ struct formatter<std::bitset<N>, Char>
   }
 };
 
+#if !FMT_FULLY_FREESTANDING
 template <typename Char>
 struct formatter<std::thread::id, Char> : basic_ostream_formatter<Char> {};
+#endif
 
 #ifdef __cpp_lib_optional
 template <typename T, typename Char>
@@ -546,6 +552,7 @@ struct formatter<Variant, Char,
 
 #endif  // FMT_CPP_LIB_VARIANT
 
+#if !FMT_FULLY_FREESTANDING
 template <> struct formatter<std::error_code> {
  private:
   format_specs specs_;
@@ -599,6 +606,7 @@ template <> struct formatter<std::error_code> {
     return detail::write<char>(ctx.out(), str, specs);
   }
 };
+#endif
 
 #if FMT_USE_RTTI
 template <> struct formatter<std::type_info> {
@@ -744,6 +752,7 @@ struct formatter<std::atomic_flag, Char> : formatter<bool, Char> {
 
 template <typename T> struct is_tuple_like;
 
+#if !FMT_FULLY_FREESTANDING
 template <typename T>
 struct is_tuple_like<std::complex<T>> : std::false_type {};
 
@@ -808,6 +817,7 @@ template <typename T, typename Char> struct formatter<std::complex<T>, Char> {
                                outer_specs);
   }
 };
+#endif
 
 template <typename T, typename Char>
 struct formatter<std::reference_wrapper<T>, Char,

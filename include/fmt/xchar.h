@@ -10,7 +10,9 @@
 
 #include "color.h"
 #include "format.h"
-#include "ostream.h"
+#if !FMT_FULLY_FREESTANDING
+#  include "ostream.h"
+#endif
 #include "ranges.h"
 
 #ifndef FMT_MODULE
@@ -52,6 +54,8 @@ inline auto write_loc(basic_appender<wchar_t> out, loc_value value,
   auto grouping = numpunct.grouping();
   if (!grouping.empty()) separator = std::wstring(1, numpunct.thousands_sep());
   return value.visit(loc_writer<wchar_t>{out, specs, separator, grouping, {}});
+#else
+  (void)out; (void)value; (void)specs; (void)loc;
 #endif
   return false;
 }
@@ -307,6 +311,7 @@ inline auto formatted_size(const S& fmt, T&&... args) -> size_t {
   return buf.count();
 }
 
+#if !FMT_FULLY_FREESTANDING
 inline void vprint(std::FILE* f, wstring_view fmt, wformat_args args) {
   auto buf = wmemory_buffer();
   detail::vformat_to(buf, fmt, args);
@@ -336,6 +341,7 @@ void println(std::FILE* f, wformat_string<T...> fmt, T&&... args) {
 template <typename... T> void println(wformat_string<T...> fmt, T&&... args) {
   return print(L"{}\n", fmt::format(fmt, std::forward<T>(args)...));
 }
+#endif
 
 inline auto vformat(text_style ts, wstring_view fmt, wformat_args args)
     -> std::wstring {
@@ -350,6 +356,8 @@ inline auto format(text_style ts, wformat_string<T...> fmt, T&&... args)
   return fmt::vformat(ts, fmt.get(), fmt::make_wformat_args(args...));
 }
 
+
+#if !FMT_FULLY_FREESTANDING
 inline void vprint(std::wostream& os, wstring_view fmt, wformat_args args) {
   auto buffer = basic_memory_buffer<wchar_t>();
   detail::vformat_to(buffer, fmt, args);
@@ -366,6 +374,7 @@ template <typename... T>
 void println(std::wostream& os, wformat_string<T...> fmt, T&&... args) {
   print(os, L"{}\n", fmt::format(fmt, std::forward<T>(args)...));
 }
+#endif
 
 /// Converts `value` to `std::wstring` using the default format for type `T`.
 template <typename T> inline auto to_wstring(const T& value) -> std::wstring {
